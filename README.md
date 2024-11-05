@@ -1,4 +1,4 @@
-# Audio Analysis Pipeline
+# Distiller
 
 A serverless pipeline for processing and analyzing audio content using AWS
 services.
