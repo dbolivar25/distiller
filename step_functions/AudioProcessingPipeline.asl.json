@@ -1,0 +1,261 @@
+{
+  "Comment": "Audio file processing with Transcribe, Comprehend, and Bedrock",
+  "StartAt": "ValidateInput",
+  "States": {
+    "ValidateInput": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.bucket",
+              "IsPresent": true
+            },
+            {
+              "Variable": "$.key",
+              "IsPresent": true
+            },
+            {
+              "Variable": "$.languageCode",
+              "IsPresent": true
+            }
+          ],
+          "Next": "StartTranscriptionJob"
+        }
+      ],
+      "Default": "Fail"
+    },
+    "StartTranscriptionJob": {
+      "Type": "Task",
+      "Parameters": {
+        "Media": {
+          "MediaFileUri.$": "States.Format('s3://{}/{}', $.bucket, $.key)"
+        },
+        "LanguageCode.$": "$.languageCode",
+        "TranscriptionJobName.$": "States.Format('{}-{}', $.key, States.UUID())",
+        "OutputBucketName.$": "$.bucket",
+        "OutputKey.$": "States.Format('{}-transcript.json', $.key)",
+        "Settings": {
+          "ShowSpeakerLabels": true,
+          "MaxSpeakerLabels": 10
+        }
+      },
+      "Resource": "arn:aws:states:::aws-sdk:transcribe:startTranscriptionJob",
+      "Next": "Wait 30 Seconds",
+      "ResultPath": "$.startTranscriptionResult"
+    },
+    "Wait 30 Seconds": {
+      "Type": "Wait",
+      "Next": "GetTranscriptionJob",
+      "Seconds": 30
+    },
+    "GetTranscriptionJob": {
+      "Type": "Task",
+      "Parameters": {
+        "TranscriptionJobName.$": "$.startTranscriptionResult.TranscriptionJob.TranscriptionJobName"
+      },
+      "Resource": "arn:aws:states:::aws-sdk:transcribe:getTranscriptionJob",
+      "Next": "Job Complete?",
+      "ResultPath": "$.getTranscriptionResult",
+      "ResultSelector": {
+        "status.$": "$.TranscriptionJob.TranscriptionJobStatus"
+      }
+    },
+    "Job Complete?": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.getTranscriptionResult.status",
+          "StringEquals": "FAILED",
+          "Next": "Fail"
+        },
+        {
+          "Variable": "$.getTranscriptionResult.status",
+          "StringEquals": "COMPLETED",
+          "Next": "Read File"
+        }
+      ],
+      "Default": "Wait 30 Seconds"
+    },
+    "Read File": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+      "Parameters": {
+        "Bucket.$": "$.bucket",
+        "Key.$": "States.Format('{}-transcript.json', $.key)"
+      },
+      "Next": "Extract Transcript",
+      "ResultSelector": {
+        "parsed.$": "States.StringToJson($.Body)"
+      },
+      "ResultPath": "$.readFileResult"
+    },
+    "Extract Transcript": {
+      "Type": "Pass",
+      "Parameters": {
+        "text.$": "$.readFileResult.parsed.results.transcripts[0].transcript",
+        "audioSegments.$": "$.readFileResult.parsed.results.audio_segments"
+      },
+      "Next": "Analysis",
+      "ResultPath": "$.readFileResult"
+    },
+    "Analysis": {
+      "Type": "Parallel",
+      "Branches": [
+        {
+          "StartAt": "Summarize",
+          "States": {
+            "Summarize": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::bedrock:invokeModel",
+              "Parameters": {
+                "ModelId": "anthropic.claude-instant-v1",
+                "Body": {
+                  "anthropic_version": "bedrock-2023-05-31",
+                  "max_tokens": 512,
+                  "messages": [
+                    {
+                      "role": "user",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Your task is to summarize the text provided by the user. Respond only once in the form of a brief markdown document. Do not lie or hallucinate."
+                        },
+                        {
+                          "type": "text",
+                          "text": "Summarize the following the text."
+                        },
+                        {
+                          "type": "text",
+                          "text.$": "$.readFileResult.text"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "DetectTopics",
+          "States": {
+            "DetectTopics": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::bedrock:invokeModel",
+              "Parameters": {
+                "ModelId": "anthropic.claude-instant-v1",
+                "Body": {
+                  "anthropic_version": "bedrock-2023-05-31",
+                  "max_tokens": 256,
+                  "messages": [
+                    {
+                      "role": "user",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Your task is to extract the 3 to 5 main topics contained within the text provided by the user. Respond only once in the form of a brief markdown document. Do not lie or hallucinate."
+                        },
+                        {
+                          "type": "text",
+                          "text": "Extract the topics from the following the text."
+                        },
+                        {
+                          "type": "text",
+                          "text.$": "$.readFileResult.text"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "DetectEntities",
+          "States": {
+            "DetectEntities": {
+              "Type": "Task",
+              "Parameters": {
+                "Text.$": "$.readFileResult.text",
+                "LanguageCode": "en"
+              },
+              "Resource": "arn:aws:states:::aws-sdk:comprehend:detectEntities",
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "DetectSentiment",
+          "States": {
+            "DetectSentiment": {
+              "Type": "Task",
+              "Parameters": {
+                "Text.$": "$.readFileResult.text",
+                "LanguageCode": "en"
+              },
+              "Resource": "arn:aws:states:::aws-sdk:comprehend:detectSentiment",
+              "End": true
+            }
+          }
+        }
+      ],
+      "Next": "Compile Analysis",
+      "ResultSelector": {
+        "summary.$": "$[0]",
+        "topics.$": "$[1]",
+        "entities.$": "$[2]",
+        "sentiment.$": "$[3]"
+      },
+      "ResultPath": "$.analysisResult"
+    },
+    "Compile Analysis": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "Payload.$": "$",
+        "FunctionName": "arn:aws:lambda:us-east-1:816069165876:function:compile_text_analysis_rs:$LATEST"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Next": "Write Report",
+      "ResultSelector": {
+        "report.$": "$.Payload.body"
+      },
+      "ResultPath": "$.compilationResult",
+      "InputPath": "$.analysisResult"
+    },
+    "Write Report": {
+      "Type": "Task",
+      "Parameters": {
+        "Body.$": "$.compilationResult.report",
+        "Bucket.$": "$.bucket",
+        "Key.$": "States.Format('{}-report.md', $.key)",
+        "Metadata": {
+          "ContentType": "text/markdown",
+          "ProcessedDate.$": "$$.State.EnteredTime",
+          "AudioFile.$": "$.key"
+        }
+      },
+      "Resource": "arn:aws:states:::aws-sdk:s3:putObject",
+      "End": true
+    },
+    "Fail": {
+      "Type": "Fail"
+    }
+  }
+}
