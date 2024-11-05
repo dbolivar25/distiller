@@ -33,6 +33,10 @@ The solution uses multiple AWS services orchestrated by Step Functions:
 - Rust toolchain (for Lambda development)
 - Basic knowledge of AWS services
 
+## Overview
+
+![Workflow](./assets/stepfunctions_graph.png)
+
 ## Usage
 
 1. Upload an audio file to S3
