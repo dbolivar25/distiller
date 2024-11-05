@@ -35,7 +35,7 @@ The solution uses multiple AWS services orchestrated by Step Functions:
 
 ## Overview
 
-![Workflow](./assets/stepfunctions_graph.png)
+![Workflow](./assets/stepfunctions_graph.svg)
 
 ## Usage
 
