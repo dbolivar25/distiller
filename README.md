@@ -16,6 +16,8 @@ The solution uses multiple AWS services orchestrated by Step Functions:
 
 ## Components
 
+- `assets/`: Diagrams and other assets
+- `interfaces/`: Input and output interfaces
 - `lambdas/`: Lambda functions for processing
 - `step_functions/`: Step Functions workflow definitions
 
