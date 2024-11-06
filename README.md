@@ -46,7 +46,7 @@ The solution uses multiple AWS services orchestrated by Step Functions:
    {
      "bucket": "your-bucket",
      "key": "audio-file.mp3",
-     "languageCode": "en"
+     "languageCode": "en-US"
    }
    ```
 
