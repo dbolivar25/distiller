@@ -239,9 +239,9 @@ impl Client {
         let transcript_key = format!("{}-transcript.json", key);
         let content = self.get_object(bucket, &transcript_key).await?;
 
-        let response = serde_json::from_slice::<serde_json::Value>(&content)?;
+        let transcript_json = serde_json::from_slice::<serde_json::Value>(&content)?;
 
-        let transcript = response
+        let transcript = transcript_json
             .get("results")
             .and_then(|r| r.get("transcripts"))
             .and_then(|t| t.get(0))
