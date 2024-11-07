@@ -31,22 +31,27 @@ async fn main() -> Result<()> {
 
     let client = Client::new(profile, region).await;
 
-    match command {
+    let result = match command {
         Commands::Get(cmd) => match cmd {
-            GetCommands::Buckets => client.list_buckets().await?,
-            GetCommands::Status { bucket, key } => client.get_status(&bucket, &key).await?,
+            GetCommands::Buckets => client.list_buckets().await,
+            GetCommands::Status { bucket, key } => client.get_status(&bucket, &key).await,
             GetCommands::Report {
                 bucket,
                 key,
                 output,
-            } => client.get_report(&bucket, &key, output).await?,
+            } => client.get_report(&bucket, &key, output).await,
             GetCommands::Transcript {
                 bucket,
                 key,
                 output,
-            } => client.get_transcript(&bucket, &key, output).await?,
+            } => client.get_transcript(&bucket, &key, output).await,
         },
-        Commands::Process(args) => client.process_file(args).await?,
+        Commands::Process(args) => client.process_file(args).await,
+    };
+
+    if let Err(err) = result {
+        eprintln!("{}", err);
+        tracing::error!("{}", err);
     }
 
     Ok(())

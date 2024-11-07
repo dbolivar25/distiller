@@ -3,6 +3,7 @@ use aws_sdk_s3::config::Region;
 use aws_sdk_s3::Client as S3Client;
 use aws_sdk_sfn::{types::ExecutionStatus, Client as SfnClient};
 use console::style;
+use indicatif::{ProgressBar, ProgressStyle};
 use std::{path::PathBuf, time::Duration};
 use tokio::{fs, time::sleep};
 use tracing::{debug, info};
@@ -14,6 +15,8 @@ const DEFAULT_LANGUAGE: &str = "en-US";
 const STATE_MACHINE_ARN: &str =
     "arn:aws:states:us-east-1:816069165876:stateMachine:AudioProcessingPipeline";
 const POLLING_INTERVAL: u64 = 5;
+const SPINNER_INTERVAL: u64 = 100; // milliseconds
+const SPINNER_CHARS: &str = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
 
 pub(crate) struct Client {
     s3_client: S3Client,
@@ -182,7 +185,14 @@ impl Client {
     }
 
     async fn wait_for_completion(&self, execution_arn: &str) -> Result<()> {
-        let progress = indicatif::ProgressBar::new_spinner();
+        let progress = ProgressBar::new_spinner().with_style(
+            ProgressStyle::default_spinner()
+                .tick_chars(SPINNER_CHARS)
+                .template("{spinner:.blue} {msg} [{elapsed_precise}]")
+                .context("Failed to create progress style")?,
+        );
+
+        progress.enable_steady_tick(Duration::from_millis(SPINNER_INTERVAL));
         progress.set_message("Processing");
 
         loop {
@@ -199,7 +209,6 @@ impl Client {
                 .expect("execution description should have a status")
             {
                 ExecutionStatus::Running => {
-                    progress.tick();
                     sleep(Duration::from_secs(POLLING_INTERVAL)).await;
                 }
                 ExecutionStatus::Succeeded => {
@@ -237,7 +246,12 @@ impl Client {
         key: &str,
         output: Option<PathBuf>,
     ) -> Result<()> {
-        let transcript_key = format!("{}-transcript.json", key);
+        let file_path = PathBuf::from(key);
+        let filename = file_path
+            .file_name()
+            .ok_or_else(|| anyhow::anyhow!("Invalid key format"))?;
+
+        let transcript_key = format!("{}-transcript.json", filename.to_string_lossy());
         let content = self.get_object(bucket, &transcript_key).await?;
 
         let transcript_json = serde_json::from_slice::<serde_json::Value>(&content)?;
@@ -267,8 +281,13 @@ impl Client {
         key: &str,
         output: Option<PathBuf>,
     ) -> Result<()> {
-        let report_key = format!("{}-report.md", key);
-        let content = self.get_object(bucket, &report_key).await?;
+        let file_path = PathBuf::from(key);
+        let filename = file_path
+            .file_name()
+            .ok_or_else(|| anyhow::anyhow!("Invalid key format"))?;
+
+        let transcript_key = format!("{}-report.md", filename.to_string_lossy());
+        let content = self.get_object(bucket, &transcript_key).await?;
 
         let report = String::from_utf8(content.to_vec())?
             .trim_matches('"')
