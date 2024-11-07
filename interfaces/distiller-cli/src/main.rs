@@ -1,23 +1,28 @@
-use anyhow::Result;
+use anyhow::{bail, Context, Result};
 use aws_sdk_s3::config::Region;
-use aws_sdk_s3::primitives::DateTimeFormat;
+use aws_sdk_s3::Client as S3Client;
 use aws_sdk_sfn::{types::ExecutionStatus, Client as SfnClient};
 use clap::{Parser, Subcommand};
+use console::style;
 use std::{path::PathBuf, time::Duration};
 use tokio::{fs, time::sleep};
+use tracing::{debug, info};
+
+// const DEFAULT_REGION: &str = "us-east-1";
+const DEFAULT_LANGUAGE: &str = "en-US";
+const STATE_MACHINE_ARN: &str =
+    "arn:aws:states:us-east-1:816069165876:stateMachine:AudioProcessingPipeline";
+const POLLING_INTERVAL: u64 = 5;
 
 #[derive(Parser)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about = "Distiller CLI")]
 struct Args {
-    /// AWS profile to use
-    #[arg(short, long, default_value = "personal-developer")]
-    profile: String,
+    #[arg(short, long)]
+    profile: Option<String>,
 
-    /// AWS region
-    #[arg(short, long, default_value = "us-east-1")]
-    region: String,
+    #[arg(short, long)]
+    region: Option<String>,
 
-    /// Verbose mode
     #[arg(short, long)]
     verbose: bool,
 
@@ -27,227 +32,141 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Get information from the pipeline
-    Get {
-        #[command(subcommand)]
-        resource: GetCommands,
-    },
-    /// Process an audio file
-    Process {
-        /// S3 bucket to use
-        bucket: String,
-
-        /// Path to the audio file
-        file: PathBuf,
-
-        /// Language code (e.g., en-US, es-ES, fr-FR)
-        #[arg(long, default_value = "en-US")]
-        language: String,
-
-        /// Wait for processing to complete
-        #[arg(long)]
-        wait: bool,
-
-        /// Output file path for the report
-        #[arg(long)]
-        report_output: Option<PathBuf>,
-    },
+    #[command(subcommand)]
+    Get(GetCommands),
+    Process(ProcessArgs),
 }
 
 #[derive(Subcommand)]
 enum GetCommands {
-    /// List available S3 buckets
     Buckets,
-    /// Get status of a processed file
     Status {
-        /// S3 bucket containing the file
         bucket: String,
-
-        /// File key in S3
-        file: String,
+        key: String,
     },
-    /// Get the analysis report
     Report {
-        /// S3 bucket containing the report
         bucket: String,
-
-        /// Original file key
-        file: String,
-
-        /// Output file path (optional)
+        key: String,
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
-    /// Get the transcript
     Transcript {
-        /// S3 bucket containing the transcript
         bucket: String,
-
-        /// Original file key
-        file: String,
-
-        /// Output file path (optional)
+        key: String,
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
+}
+
+#[derive(Parser)]
+struct ProcessArgs {
+    bucket: String,
+    file: PathBuf,
+    #[arg(long)]
+    language: Option<String>,
+    #[arg(long)]
+    wait: bool,
+    #[arg(long)]
+    transcript_output: Option<PathBuf>,
+    #[arg(long)]
+    report_output: Option<PathBuf>,
 }
 
 struct Pipeline {
-    s3_client: aws_sdk_s3::Client,
+    s3_client: S3Client,
     sfn_client: SfnClient,
-    state_machine_arn: String,
 }
 
 impl Pipeline {
-    async fn new(profile: String, region: String) -> Result<Self> {
-        let config = aws_config::from_env()
-            .profile_name(profile)
-            .region(Region::new(region))
-            .load()
-            .await;
+    async fn new(profile: Option<String>, region: Option<String>) -> Result<Self> {
+        let config = match (profile, region) {
+            (Some(profile), Some(region)) => aws_config::from_env()
+                .profile_name(profile)
+                .region(Region::new(region)),
+            (Some(profile), None) => aws_config::from_env().profile_name(profile),
+            (None, Some(region)) => aws_config::from_env().region(Region::new(region)),
+            _ => aws_config::from_env(),
+        }
+        .load()
+        .await;
 
-        // TODO: Make this configurable
-        let state_machine_arn =
-            "arn:aws:states:us-east-1:816069165876:stateMachine:AudioProcessingPipeline"
-                .to_string();
+        debug!("AWS config initialized: {:?}", config);
 
         Ok(Self {
-            s3_client: aws_sdk_s3::Client::new(&config),
+            s3_client: S3Client::new(&config),
             sfn_client: SfnClient::new(&config),
-            state_machine_arn,
         })
     }
 
-    async fn get_buckets(&self) -> Result<()> {
-        let buckets = self.s3_client.list_buckets().send().await?;
+    async fn list_buckets(&self) -> Result<()> {
+        let buckets = self
+            .s3_client
+            .list_buckets()
+            .send()
+            .await
+            .context("Failed to list buckets")?;
 
         for bucket in buckets.buckets().unwrap_or_default() {
-            println!("{}", bucket.name().unwrap_or_default());
-        }
-
-        Ok(())
-    }
-
-    async fn process_file(
-        &self,
-        file: PathBuf,
-        bucket: &str,
-        language: &str,
-        wait: bool,
-        report_output: Option<PathBuf>,
-    ) -> Result<()> {
-        // Validate file exists
-        if !file.exists() {
-            return Err(anyhow::anyhow!("File does not exist: {:?}", file));
-        }
-
-        // Upload file to S3
-        let filename = file
-            .file_name()
-            .ok_or_else(|| anyhow::anyhow!("Invalid filename"))?
-            .to_string_lossy();
-
-        let key = filename.to_string();
-
-        println!("📤 Uploading file to S3...");
-        let content = fs::read(&file).await?;
-        self.s3_client
-            .put_object()
-            .bucket(bucket)
-            .key(&key)
-            .body(content.into())
-            .send()
-            .await?;
-
-        println!("✅ File uploaded successfully");
-        println!("🔑 File key: {}", key);
-
-        // Start Step Function execution
-        println!("\n🚀 Starting audio processing pipeline...");
-        let input = serde_json::json!({
-            "bucket": bucket,
-            "key": key,
-            "languageCode": language
-        });
-
-        let execution = self
-            .sfn_client
-            .start_execution()
-            .state_machine_arn(&self.state_machine_arn)
-            .input(serde_json::to_string(&input)?)
-            .send()
-            .await?;
-
-        let execution_arn = execution.execution_arn().unwrap_or_default();
-        println!("✨ Processing started!");
-        println!("📋 Execution ARN: {}", execution_arn);
-
-        if wait {
-            println!("\n⏳ Waiting for processing to complete...");
-            self.await_execution(&execution_arn).await?;
-            println!("\n✅ Processing complete!");
-
-            // Get and display the report
-            self.get_report(bucket, &key, report_output).await?;
-        }
-
-        Ok(())
-    }
-
-    async fn await_execution(&self, execution_arn: &str) -> Result<()> {
-        loop {
-            let execution = self
-                .sfn_client
-                .describe_execution()
-                .execution_arn(execution_arn)
-                .send()
-                .await?;
-
-            match execution.status() {
-                Some(ExecutionStatus::Running) => {
-                    print!(".");
-                    sleep(Duration::from_secs(5)).await;
-                }
-                Some(ExecutionStatus::Succeeded) => {
-                    println!("\n🎉 Execution completed successfully!");
-                    break;
-                }
-                Some(ExecutionStatus::Failed) => {
-                    return Err(anyhow::anyhow!(
-                        "Execution failed: {}",
-                        execution.error().unwrap_or_default()
-                    ));
-                }
-                Some(status) => {
-                    return Err(anyhow::anyhow!("Unexpected status: {:?}", status));
-                }
-                None => {
-                    return Err(anyhow::anyhow!("Could not determine execution status"));
-                }
+            if let Some(name) = bucket.name() {
+                println!("{}", name);
             }
         }
         Ok(())
     }
 
-    async fn get_execution_for_file(&self, file_key: &str) -> Result<String> {
+    async fn get_status(&self, bucket: &str, key: &str) -> Result<()> {
+        let execution_arn = self.find_execution(key).await?;
+        let execution = self
+            .sfn_client
+            .describe_execution()
+            .execution_arn(&execution_arn)
+            .send()
+            .await
+            .context("Failed to get execution status")?;
+
+        println!("\n{}", style("Status Report").bold());
+        println!("{}", style("-------------").dim());
+        println!("File: {}", key);
+        println!("Bucket: {}", bucket);
+        println!(
+            "Status: {}",
+            style(
+                execution
+                    .status()
+                    .expect("execution description should have a status")
+                    .as_str()
+            )
+            .yellow()
+        );
+        println!("Execution ARN: {}", execution_arn);
+
+        if let Some(error) = execution.error() {
+            println!("\nError: {}", style(error).red());
+        }
+
+        Ok(())
+    }
+
+    async fn find_execution(&self, file_key: &str) -> Result<String> {
         let executions = self
             .sfn_client
             .list_executions()
-            .state_machine_arn(&self.state_machine_arn)
+            .state_machine_arn(STATE_MACHINE_ARN)
             .send()
-            .await?;
+            .await
+            .context("Failed to list executions")?;
 
         for execution in executions.executions().unwrap_or_default() {
-            // Get the execution details to access input
-            let execution_details = self
+            if let Some(input) = self
                 .sfn_client
                 .describe_execution()
                 .execution_arn(execution.execution_arn().unwrap_or_default())
                 .send()
-                .await?;
-
-            if let Some(input) = execution_details.input() {
-                if let Ok(input) = serde_json::from_str::<serde_json::Value>(input) {
+                .await
+                .ok()
+                .and_then(|e| e.input().map(String::from))
+            {
+                if let Ok(input) = serde_json::from_str::<serde_json::Value>(&input) {
                     if input["key"].as_str() == Some(file_key) {
                         return Ok(execution.execution_arn().unwrap_or_default().to_string());
                     }
@@ -258,107 +177,154 @@ impl Pipeline {
         Err(anyhow::anyhow!("No execution found for file: {}", file_key))
     }
 
-    async fn get_status(&self, bucket: &str, file_key: &str) -> Result<()> {
-        let execution_arn = self.get_execution_for_file(file_key).await?;
-        let execution = self
-            .sfn_client
-            .describe_execution()
-            .execution_arn(&execution_arn)
-            .send()
-            .await?;
+    async fn process_file(&self, args: ProcessArgs) -> Result<()> {
+        let ProcessArgs {
+            bucket,
+            file,
+            language,
+            transcript_output,
+            report_output,
+            ..
+        } = args;
 
-        println!("📊 Status Report");
-        println!("---------------");
-        println!("File: {}", file_key);
-        println!("Bucket: {}", bucket);
-        println!(
-            "Status: {}",
-            execution.status().expect("that status exists.").as_str()
-        );
-        println!(
-            "Started: {}",
-            execution
-                .start_date()
-                .expect("that start date exists.")
-                .fmt(aws_sdk_s3::primitives::DateTimeFormat::HttpDate)?
-        );
-
-        if let Some(stop_date) = execution.stop_date() {
-            println!("Completed: {}", stop_date.fmt(DateTimeFormat::HttpDate)?);
+        if !file.exists() {
+            bail!("File does not exist: {:?}", file);
         }
 
-        if let Some(error) = execution.error() {
-            println!("\n❌ Error: {}", error);
+        let key = file
+            .file_name()
+            .ok_or_else(|| anyhow::anyhow!("Invalid filename"))?
+            .to_string_lossy()
+            .to_string();
+
+        info!("Uploading {} to {}", key, bucket);
+
+        self.s3_client
+            .put_object()
+            .bucket(&bucket)
+            .key(&key)
+            .body(fs::read(&file).await?.into())
+            .send()
+            .await
+            .context("Failed to upload file")?;
+
+        let execution = self
+            .sfn_client
+            .start_execution()
+            .state_machine_arn(STATE_MACHINE_ARN)
+            .input(serde_json::to_string(&serde_json::json!({
+                "bucket": bucket,
+                "key": key,
+                "languageCode": language.unwrap_or_else(|| DEFAULT_LANGUAGE.to_string())
+            }))?)
+            .send()
+            .await
+            .context("Failed to start execution")?;
+
+        let execution_arn = execution.execution_arn().context("Missing execution ARN")?;
+        info!("Started processing: {}", execution_arn);
+
+        if args.wait {
+            self.wait_for_completion(execution_arn).await?;
+
+            self.get_transcript(&bucket, &key, transcript_output)
+                .await?;
+
+            self.get_report(&bucket, &key, report_output).await?;
         }
 
         Ok(())
     }
 
-    async fn get_transcript(&self, bucket: &str, key: &str, output: Option<PathBuf>) -> Result<()> {
-        let transcript_key = format!("{}-transcript.json", key);
+    async fn wait_for_completion(&self, execution_arn: &str) -> Result<()> {
+        let progress = indicatif::ProgressBar::new_spinner();
+        progress.set_message("Processing");
 
-        let transcript = self
+        loop {
+            let execution = self
+                .sfn_client
+                .describe_execution()
+                .execution_arn(execution_arn)
+                .send()
+                .await
+                .context("Failed to get execution")?;
+
+            match execution
+                .status()
+                .expect("execution description should have a status")
+            {
+                ExecutionStatus::Running => {
+                    progress.tick();
+                    sleep(Duration::from_secs(POLLING_INTERVAL)).await;
+                }
+                ExecutionStatus::Succeeded => {
+                    progress.finish_with_message("Processing complete!");
+                    break;
+                }
+                ExecutionStatus::Failed => {
+                    progress.finish_with_message("Processing failed!");
+                    bail!("Execution failed");
+                }
+                status => bail!("Unexpected status: {:?}", status),
+            }
+        }
+        Ok(())
+    }
+
+    async fn get_object(&self, bucket: &str, key: &str) -> Result<bytes::Bytes> {
+        Ok(self
             .s3_client
             .get_object()
             .bucket(bucket)
-            .key(&transcript_key)
+            .key(key)
             .send()
-            .await?;
+            .await?
+            .body
+            .collect()
+            .await?
+            .into_bytes())
+    }
 
-        let content = transcript.body.collect().await?;
-        let transcript_json: serde_json::Value = serde_json::from_slice(&content.to_vec())?;
+    async fn get_transcript(&self, bucket: &str, key: &str, output: Option<PathBuf>) -> Result<()> {
+        let transcript_key = format!("{}-transcript.json", key);
+        let content = self.get_object(bucket, &transcript_key).await?;
 
-        // Extract just the transcript text
-        let transcript_text = transcript_json["results"]["transcripts"][0]["transcript"]
-            .as_str()
-            .ok_or_else(|| anyhow::anyhow!("Failed to extract transcript text"))?;
+        let response = serde_json::from_slice::<serde_json::Value>(&content)?;
+
+        let transcript = response
+            .get("results")
+            .and_then(|r| r.get("transcripts"))
+            .and_then(|t| t.get(0))
+            .and_then(|t| t.get("transcript"))
+            .and_then(|t| t.as_str())
+            .ok_or_else(|| anyhow::anyhow!("Invalid transcript format"))?;
 
         match output {
             Some(path) => {
-                fs::write(&path, transcript_text).await?;
-                println!("📝 Transcript saved to {:?}", path);
+                fs::write(&path, transcript).await?;
+                info!("Transcript saved to {:?}", path);
             }
-            None => {
-                println!("{}", transcript_text);
-            }
+            None => println!("\n{}", transcript),
         }
-
         Ok(())
     }
 
     async fn get_report(&self, bucket: &str, key: &str, output: Option<PathBuf>) -> Result<()> {
         let report_key = format!("{}-report.md", key);
+        let content = self.get_object(bucket, &report_key).await?;
 
-        let report = self
-            .s3_client
-            .get_object()
-            .bucket(bucket)
-            .key(&report_key)
-            .send()
-            .await?;
-
-        let content = report.body.collect().await?;
-        let report_text = String::from_utf8(content.to_vec())?;
-
-        assert!(
-            report_text.starts_with('"') && report_text.ends_with('"'),
-            "Expected report text to be wrapped in quotes: {}",
-            report_text
-        );
-
-        // format the report text
-        let report_text = &report_text[1..report_text.len() - 1].replace("\\n", "\n");
+        let report = String::from_utf8(content.to_vec())?
+            .trim_matches('"')
+            .replace("\\n", "\n")
+            .replace("\\\"", "\"");
 
         match output {
             Some(path) => {
-                fs::write(&path, &report_text).await?;
-                println!("📝 Report saved to {:?}", path);
+                fs::write(&path, report).await?;
+                info!("Report saved to {:?}", path);
             }
-            None => {
-                println!("{}", report_text);
-            }
+            None => println!("\n{}", report),
         }
-
         Ok(())
     }
 }
@@ -372,46 +338,32 @@ async fn main() -> Result<()> {
         command,
     } = Args::parse();
 
-    if verbose {
-        tracing_subscriber::fmt::init();
-    }
+    tracing_subscriber::fmt()
+        .with_max_level(if verbose {
+            tracing::Level::DEBUG
+        } else {
+            tracing::Level::WARN
+        })
+        .init();
 
     let pipeline = Pipeline::new(profile, region).await?;
 
     match command {
-        Commands::Get { resource } => match resource {
-            GetCommands::Buckets => {
-                pipeline.get_buckets().await?;
-            }
-            GetCommands::Status { bucket, file } => {
-                pipeline.get_status(&bucket, &file).await?;
-            }
-            GetCommands::Transcript {
-                bucket,
-                file,
-                output,
-            } => {
-                pipeline.get_transcript(&bucket, &file, output).await?;
-            }
+        Commands::Get(cmd) => match cmd {
+            GetCommands::Buckets => pipeline.list_buckets().await?,
+            GetCommands::Status { bucket, key } => pipeline.get_status(&bucket, &key).await?,
             GetCommands::Report {
                 bucket,
-                file,
+                key,
                 output,
-            } => {
-                pipeline.get_report(&bucket, &file, output).await?;
-            }
+            } => pipeline.get_report(&bucket, &key, output).await?,
+            GetCommands::Transcript {
+                bucket,
+                key,
+                output,
+            } => pipeline.get_transcript(&bucket, &key, output).await?,
         },
-        Commands::Process {
-            bucket,
-            file,
-            language,
-            wait,
-            report_output,
-        } => {
-            pipeline
-                .process_file(file, &bucket, &language, wait, report_output)
-                .await?;
-        }
+        Commands::Process(args) => pipeline.process_file(args).await?,
     }
 
     Ok(())
