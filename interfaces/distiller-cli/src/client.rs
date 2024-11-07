@@ -54,6 +54,7 @@ impl Client {
                 println!("{}", name);
             }
         }
+
         Ok(())
     }
 
@@ -84,7 +85,7 @@ impl Client {
         println!("Execution ARN: {}", execution_arn);
 
         if let Some(error) = execution.error() {
-            println!("\nError: {}", style(error).red());
+            tracing::error!("Execution error: {:?}", error);
         }
 
         Ok(())
@@ -117,7 +118,7 @@ impl Client {
             }
         }
 
-        Err(anyhow::anyhow!("No execution found for file: {}", file_key))
+        bail!("No execution found for file: {}", file_key)
     }
 
     pub(crate) async fn process_file(&self, args: ProcessArgs) -> Result<()> {
