@@ -16,17 +16,20 @@ async fn main() -> Result<()> {
         command,
     } = Args::parse();
 
-    tracing_subscriber::fmt()
-        .with_max_level(match verbose {
-            0 => tracing::Level::ERROR,
-            1 => tracing::Level::WARN,
-            2 => tracing::Level::INFO,
-            3 => tracing::Level::DEBUG,
-            _ => tracing::Level::TRACE,
-        })
-        .init();
+    if verbose > 0 {
+        tracing_subscriber::fmt()
+            .with_max_level(match verbose {
+                0 => unreachable!(),
+                1 => tracing::Level::ERROR,
+                2 => tracing::Level::WARN,
+                3 => tracing::Level::INFO,
+                4 => tracing::Level::DEBUG,
+                _ => tracing::Level::TRACE,
+            })
+            .init();
+    }
 
-    let client = Client::new(profile, region).await?;
+    let client = Client::new(profile, region).await;
 
     match command {
         Commands::Get(cmd) => match cmd {

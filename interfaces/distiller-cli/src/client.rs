@@ -21,7 +21,7 @@ pub(crate) struct Client {
 }
 
 impl Client {
-    pub(crate) async fn new(profile: Option<String>, region: Option<String>) -> Result<Self> {
+    pub(crate) async fn new(profile: Option<String>, region: Option<String>) -> Self {
         let config = match (profile, region) {
             (Some(profile), Some(region)) => aws_config::from_env()
                 .profile_name(profile)
@@ -35,10 +35,10 @@ impl Client {
 
         debug!("AWS config initialized: {:?}", config);
 
-        Ok(Self {
+        Self {
             s3_client: S3Client::new(&config),
             sfn_client: SfnClient::new(&config),
-        })
+        }
     }
 
     pub(crate) async fn list_buckets(&self) -> Result<()> {
@@ -66,7 +66,7 @@ impl Client {
             .execution_arn(&execution_arn)
             .send()
             .await
-            .context("Failed to get execution status")?;
+            .context("Failed to get execution description")?;
 
         println!("\n{}", style("Status Report").bold());
         println!("{}", style("-------------").dim());
@@ -85,7 +85,7 @@ impl Client {
         println!("Execution ARN: {}", execution_arn);
 
         if let Some(error) = execution.error() {
-            tracing::error!("Execution error: {:?}", error);
+            tracing::error!("{}", error);
         }
 
         Ok(())
