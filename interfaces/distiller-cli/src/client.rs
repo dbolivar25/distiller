@@ -212,6 +212,7 @@ impl Client {
                 status => bail!("Unexpected status: {:?}", status),
             }
         }
+
         Ok(())
     }
 
@@ -255,6 +256,7 @@ impl Client {
             }
             None => println!("\n{}", transcript),
         }
+
         Ok(())
     }
 
@@ -279,6 +281,7 @@ impl Client {
             }
             None => println!("\n{}", report),
         }
+
         Ok(())
     }
 }
