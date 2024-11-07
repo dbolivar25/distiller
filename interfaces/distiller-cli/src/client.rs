@@ -85,6 +85,7 @@ impl Client {
         println!("Execution ARN: {}", execution_arn);
 
         if let Some(error) = execution.error() {
+            println!("Error: {}", error);
             tracing::error!("{}", error);
         }
 
