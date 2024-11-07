@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{ArgAction, Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -20,7 +20,7 @@ pub(crate) struct Args {
     #[arg(
         short,
         long,
-        action = clap::ArgAction::Count,
+        action = ArgAction::Count,
         global = true,
         help_heading = "GLOBAL OPTIONS"
     )]
