@@ -3,6 +3,7 @@ use clap::Parser;
 
 mod args;
 mod client;
+mod display;
 
 use args::{Args, Commands, GetCommands};
 use client::Client;
@@ -50,7 +51,6 @@ async fn main() -> Result<()> {
     };
 
     if let Err(err) = result {
-        eprintln!("{}", err);
         tracing::error!("{}", err);
     }
 

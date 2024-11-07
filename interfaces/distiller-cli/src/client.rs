@@ -1,22 +1,26 @@
+use crate::{
+    args::ProcessArgs,
+    display::{
+        print_divider, print_error, print_header, print_success, print_table_row, truncate_arn,
+    },
+};
 use anyhow::{bail, Context, Result};
 use aws_sdk_s3::config::Region;
 use aws_sdk_s3::Client as S3Client;
 use aws_sdk_sfn::{types::ExecutionStatus, Client as SfnClient};
-use console::style;
+use console::{style, StyledObject};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::{path::PathBuf, time::Duration};
 use tokio::{fs, time::sleep};
-use tracing::{debug, info};
+use tracing::debug;
 
-use crate::args::ProcessArgs;
-
-// const DEFAULT_REGION: &str = "us-east-1";
 const DEFAULT_LANGUAGE: &str = "en-US";
 const STATE_MACHINE_ARN: &str =
     "arn:aws:states:us-east-1:816069165876:stateMachine:AudioProcessingPipeline";
 const POLLING_INTERVAL: u64 = 5;
-const SPINNER_INTERVAL: u64 = 100; // milliseconds
+const SPINNER_INTERVAL: u64 = 100;
 const SPINNER_CHARS: &str = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
+const DIVIDER_WIDTH: usize = 60;
 
 pub(crate) struct Client {
     s3_client: S3Client,
@@ -52,11 +56,16 @@ impl Client {
             .await
             .context("Failed to list buckets")?;
 
-        for bucket in buckets.buckets().unwrap_or_default() {
+        print_header("Available Buckets");
+        print_divider();
+
+        for (i, bucket) in buckets.buckets().into_iter().flatten().enumerate() {
             if let Some(name) = bucket.name() {
-                println!("{}", name);
+                print_table_row(&format!("{}", i + 1), name);
             }
         }
+
+        print_divider();
 
         Ok(())
     }
@@ -71,24 +80,19 @@ impl Client {
             .await
             .context("Failed to get execution description")?;
 
-        println!("\n{}", style("Status Report").bold());
-        println!("{}", style("-------------").dim());
-        println!("File: {}", key);
-        println!("Bucket: {}", bucket);
-        println!(
-            "Status: {}",
-            style(
-                execution
-                    .status()
-                    .expect("execution description should have a status")
-                    .as_str()
-            )
-            .yellow()
+        print_header("Status Report");
+        print_divider();
+        print_table_row("File:", key);
+        print_table_row("Bucket:", bucket);
+        print_table_row(
+            "Status:",
+            get_status_style(execution.status().expect("execution should have status")).to_string(),
         );
-        println!("Execution ARN: {}", execution_arn);
+        print_table_row("Execution:", truncate_arn(&execution_arn));
+        print_divider();
 
         if let Some(error) = execution.error() {
-            println!("Error: {}", error);
+            print_error(error);
             tracing::error!("{}", error);
         }
 
@@ -145,7 +149,12 @@ impl Client {
             .to_string_lossy()
             .to_string();
 
-        info!("Uploading {} to {}", key, bucket);
+        print_header("Starting Processing Job");
+        print_divider();
+        print_table_row("File:", &key);
+        print_table_row("Bucket:", &bucket);
+        print_table_row("Language:", language.as_deref().unwrap_or(DEFAULT_LANGUAGE));
+        print_divider();
 
         self.s3_client
             .put_object()
@@ -170,14 +179,12 @@ impl Client {
             .context("Failed to start execution")?;
 
         let execution_arn = execution.execution_arn().context("Missing execution ARN")?;
-        info!("Started processing: {}", execution_arn);
 
         if args.wait {
             self.wait_for_completion(execution_arn).await?;
 
             self.get_transcript(&bucket, &key, transcript_output)
                 .await?;
-
             self.get_report(&bucket, &key, report_output).await?;
         }
 
@@ -185,15 +192,19 @@ impl Client {
     }
 
     async fn wait_for_completion(&self, execution_arn: &str) -> Result<()> {
-        let progress = ProgressBar::new_spinner().with_style(
-            ProgressStyle::default_spinner()
-                .tick_chars(SPINNER_CHARS)
-                .template("{spinner:.blue} {msg} [{elapsed_precise}]")
-                .context("Failed to create progress style")?,
-        );
+        let progress_style = ProgressStyle::default_spinner()
+            .tick_chars(SPINNER_CHARS)
+            .template(&format!(
+                "{{spinner:.blue}} {{prefix:.bold.dim}} {{msg}} [{{elapsed_precise}}]{}",
+                " ".repeat(DIVIDER_WIDTH - 50)
+            ))
+            .context("Failed to create progress style")?;
+
+        let progress = ProgressBar::new_spinner().with_style(progress_style);
 
         progress.enable_steady_tick(Duration::from_millis(SPINNER_INTERVAL));
-        progress.set_message("Processing");
+        progress.set_prefix("Processing");
+        progress.set_message("initializing...");
 
         loop {
             let execution = self
@@ -209,14 +220,18 @@ impl Client {
                 .expect("execution description should have a status")
             {
                 ExecutionStatus::Running => {
+                    progress
+                        .set_message(truncate_arn(execution.execution_arn().unwrap_or_default()));
                     sleep(Duration::from_secs(POLLING_INTERVAL)).await;
                 }
                 ExecutionStatus::Succeeded => {
-                    progress.finish_with_message("Processing complete!");
+                    progress.finish_with_message(format!("{}", style("complete").green().bold()));
+                    print_divider();
                     break;
                 }
                 ExecutionStatus::Failed => {
-                    progress.finish_with_message("Processing failed!");
+                    progress.finish_with_message(format!("{}", style("failed").red().bold()));
+                    print_divider();
                     bail!("Execution failed");
                 }
                 status => bail!("Unexpected status: {:?}", status),
@@ -267,9 +282,14 @@ impl Client {
         match output {
             Some(path) => {
                 fs::write(&path, transcript).await?;
-                info!("Transcript saved to {:?}", path);
+                print_success(format!("Transcript saved to {:?}", path));
             }
-            None => println!("\n{}", transcript),
+            None => {
+                print_header("Transcript");
+                print_divider();
+                println!("{}", transcript);
+                print_divider();
+            }
         }
 
         Ok(())
@@ -297,11 +317,25 @@ impl Client {
         match output {
             Some(path) => {
                 fs::write(&path, report).await?;
-                info!("Report saved to {:?}", path);
+                print_success(format!("Report saved to {:?}", path));
             }
-            None => println!("\n{}", report),
+            None => {
+                print_header("Report");
+                print_divider();
+                println!("{}", report);
+                print_divider();
+            }
         }
 
         Ok(())
+    }
+}
+
+fn get_status_style(status: &ExecutionStatus) -> StyledObject<String> {
+    match status {
+        ExecutionStatus::Running => style(status.as_str().to_string()).yellow().bold(),
+        ExecutionStatus::Succeeded => style(status.as_str().to_string()).green().bold(),
+        ExecutionStatus::Failed => style(status.as_str().to_string()).red().bold(),
+        _ => style(status.as_str().to_string()).dim().bold(),
     }
 }
