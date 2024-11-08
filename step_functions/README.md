@@ -21,7 +21,7 @@ services:
 {
   "bucket": "string", // S3 bucket containing the audio file
   "key": "string", // S3 key for the audio file
-  "languageCode": "string" // Language code (e.g., "en")
+  "languageCode": "string" // Language code (e.g., "en-US")
 }
 ```
 
