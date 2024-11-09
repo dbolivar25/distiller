@@ -8,9 +8,10 @@ use std::collections::HashMap;
 #[derive(Debug, Deserialize)]
 struct AnalysisResult {
     summary: BedrockWrapper,
-    sentiment: SentimentData,
-    entities: EntityData,
+    sentiment: Vec<Vec<SentimentData>>,
+    entities: Vec<Vec<EntityData>>,
     topics: BedrockWrapper,
+    key: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -46,7 +47,7 @@ struct ContentBlock {
     text: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct SentimentData {
     Sentiment: String,
     SentimentScore: HashMap<String, f64>,
@@ -98,14 +99,79 @@ fn get_sentiment_emoji(sentiment: &str) -> &'static str {
     }
 }
 
-fn format_entities(entities: &[Entity]) -> String {
-    if entities.is_empty() {
+fn combine_sentiment_data(sentiments: &[Vec<SentimentData>]) -> SentimentData {
+    // Flatten the nested arrays
+    let flattened: Vec<&SentimentData> = sentiments.iter().flat_map(|inner| inner.iter()).collect();
+
+    if flattened.is_empty() {
+        return SentimentData {
+            Sentiment: "NEUTRAL".to_string(),
+            SentimentScore: HashMap::new(),
+        };
+    }
+
+    // Count occurrences of each sentiment
+    let mut sentiment_counts: HashMap<String, usize> = HashMap::new();
+    let mut total_scores: HashMap<String, f64> = HashMap::new();
+    let sentiment_count = flattened.len() as f64;
+
+    for sentiment in flattened {
+        *sentiment_counts
+            .entry(sentiment.Sentiment.clone())
+            .or_default() += 1;
+
+        for (key, &score) in &sentiment.SentimentScore {
+            *total_scores.entry(key.clone()).or_default() += score;
+        }
+    }
+
+    // Find the most common sentiment
+    let overall_sentiment = sentiment_counts
+        .iter()
+        .max_by_key(|&(_, count)| *count)
+        .map(|(sentiment, _)| sentiment.clone())
+        .unwrap_or_else(|| "NEUTRAL".to_string());
+
+    // Average the scores
+    let mut average_scores = HashMap::new();
+    for (key, total) in total_scores {
+        average_scores.insert(key, total / sentiment_count);
+    }
+
+    SentimentData {
+        Sentiment: overall_sentiment,
+        SentimentScore: average_scores,
+    }
+}
+
+fn format_entities(entities_chunks: &[Vec<EntityData>]) -> String {
+    // Flatten and collect all entities
+    let all_entities: Vec<&Entity> = entities_chunks
+        .iter()
+        .flat_map(|chunk| chunk.iter())
+        .flat_map(|data| data.Entities.iter())
+        .collect();
+
+    if all_entities.is_empty() {
         return String::from("No entities detected");
     }
 
-    let mut entity_groups: HashMap<String, Vec<&Entity>> = HashMap::new();
+    // Deduplicate entities by text and type, keeping the highest confidence score
+    let mut unique_entities: HashMap<(String, String), &Entity> = HashMap::new();
+    for entity in all_entities.iter() {
+        unique_entities
+            .entry((entity.Text.clone(), entity.Type.clone()))
+            .and_modify(|e| {
+                if entity.Score > e.Score {
+                    *e = entity;
+                }
+            })
+            .or_insert(entity);
+    }
 
-    for entity in entities {
+    // Group by entity type
+    let mut entity_groups: HashMap<String, Vec<&Entity>> = HashMap::new();
+    for entity in unique_entities.values() {
         entity_groups
             .entry(entity.Type.clone())
             .or_default()
@@ -114,6 +180,14 @@ fn format_entities(entities: &[Entity]) -> String {
 
     let mut sections = Vec::new();
     for (entity_type, entities) in entity_groups {
+        // Sort entities by confidence score
+        let mut entities = entities.to_vec();
+        entities.sort_by(|a, b| {
+            b.Score
+                .partial_cmp(&a.Score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
         let entity_texts: Vec<String> = entities
             .iter()
             .map(|entity| {
@@ -140,15 +214,12 @@ async fn function_handler(event: LambdaEvent<Value>) -> Result<Response, Error> 
     let analysis: AnalysisResult = serde_json::from_value(event.payload.clone())
         .map_err(|e| Error::from(format!("Failed to parse Step Functions payload: {}", e)))?;
 
-    let key = event
-        .payload
-        .get("key")
-        .and_then(|k| k.as_str())
-        .unwrap_or("unknown");
-
     let summary = extract_text(&analysis.summary);
     let topics = extract_text(&analysis.topics);
-    let sentiment_emoji = get_sentiment_emoji(&analysis.sentiment.Sentiment);
+
+    // Combine sentiment from all chunks
+    let combined_sentiment = combine_sentiment_data(&analysis.sentiment);
+    let sentiment_emoji = get_sentiment_emoji(&combined_sentiment.Sentiment);
 
     let markdown = format!(
         r#"# Analysis Results for {}
@@ -170,41 +241,37 @@ Confidence Scores:
 ## Named Entities
 {}
 "#,
-        key,
+        analysis.key,
         Utc::now().format("%Y-%m-%d %H:%M:%S"),
         summary.replace("# ", "## "),
         topics.replace("# ", "## "),
         sentiment_emoji,
-        analysis.sentiment.Sentiment.to_lowercase(),
+        combined_sentiment.Sentiment.to_lowercase(),
         format_sentiment_score(
-            *analysis
-                .sentiment
+            *combined_sentiment
                 .SentimentScore
                 .get("Positive")
                 .unwrap_or(&0.0)
         ),
         format_sentiment_score(
-            *analysis
-                .sentiment
+            *combined_sentiment
                 .SentimentScore
                 .get("Negative")
                 .unwrap_or(&0.0)
         ),
         format_sentiment_score(
-            *analysis
-                .sentiment
+            *combined_sentiment
                 .SentimentScore
                 .get("Neutral")
                 .unwrap_or(&0.0)
         ),
         format_sentiment_score(
-            *analysis
-                .sentiment
+            *combined_sentiment
                 .SentimentScore
                 .get("Mixed")
                 .unwrap_or(&0.0)
         ),
-        format_entities(&analysis.entities.Entities)
+        format_entities(&analysis.entities)
     );
 
     let mut headers = HashMap::new();
