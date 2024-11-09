@@ -149,7 +149,7 @@ impl Client {
             .to_string_lossy()
             .to_string();
 
-        print_header("Starting Processing Job");
+        print_header("Processing Job");
         print_divider();
         print_table_row("File:", &key);
         print_table_row("Bucket:", &bucket);
