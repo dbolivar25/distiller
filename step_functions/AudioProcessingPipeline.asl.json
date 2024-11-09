@@ -72,152 +72,209 @@
         {
           "Variable": "$.getTranscriptionResult.status",
           "StringEquals": "COMPLETED",
-          "Next": "Read File"
+          "Next": "Extract Transcript"
         }
       ],
       "Default": "Wait 30 Seconds"
     },
-    "Read File": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
-      "Parameters": {
-        "Bucket.$": "$.bucket",
-        "Key.$": "States.Format('{}-transcript.json', $.key)"
-      },
-      "Next": "Extract Transcript",
-      "ResultSelector": {
-        "parsed.$": "States.StringToJson($.Body)"
-      },
-      "ResultPath": "$.readFileResult"
-    },
     "Extract Transcript": {
-      "Type": "Pass",
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
       "Parameters": {
-        "text.$": "$.readFileResult.parsed.results.transcripts[0].transcript",
-        "audioSegments.$": "$.readFileResult.parsed.results.audio_segments"
+        "FunctionName": "arn:aws:lambda:us-east-1:816069165876:function:extract_transcript_rs",
+        "Payload": {
+          "bucket.$": "$.bucket",
+          "key.$": "States.Format('{}-transcript.json', $.key)"
+        }
       },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
       "Next": "Analysis",
-      "ResultPath": "$.readFileResult"
+      "ResultPath": "$.transcriptData",
+      "ResultSelector": {
+        "full_text.$": "$.Payload.body.full_text",
+        "chunks.$": "$.Payload.body.chunks"
+      }
     },
     "Analysis": {
       "Type": "Parallel",
       "Branches": [
         {
-          "StartAt": "Summarize",
+          "StartAt": "Bedrock Analysis",
           "States": {
-            "Summarize": {
-              "Type": "Task",
-              "Resource": "arn:aws:states:::bedrock:invokeModel",
-              "Parameters": {
-                "ModelId": "anthropic.claude-instant-v1",
-                "Body": {
-                  "anthropic_version": "bedrock-2023-05-31",
-                  "max_tokens": 512,
-                  "messages": [
-                    {
-                      "role": "user",
-                      "content": [
-                        {
-                          "type": "text",
-                          "text": "Your task is to summarize the text provided by the user. Respond only once in the form of a brief markdown document. Do not lie or hallucinate."
-                        },
-                        {
-                          "type": "text",
-                          "text": "Summarize the following the text."
-                        },
-                        {
-                          "type": "text",
-                          "text.$": "$.readFileResult.text"
+            "Bedrock Analysis": {
+              "Type": "Parallel",
+              "Branches": [
+                {
+                  "StartAt": "Summarize",
+                  "States": {
+                    "Summarize": {
+                      "Type": "Task",
+                      "Resource": "arn:aws:states:::bedrock:invokeModel",
+                      "Parameters": {
+                        "ModelId": "anthropic.claude-instant-v1",
+                        "Body": {
+                          "anthropic_version": "bedrock-2023-05-31",
+                          "max_tokens": 512,
+                          "messages": [
+                            {
+                              "role": "user",
+                              "content": [
+                                {
+                                  "type": "text",
+                                  "text": "Your task is to summarize the text provided by the user. Respond only once in the form of a brief markdown document. Do not lie or hallucinate."
+                                },
+                                {
+                                  "type": "text",
+                                  "text": "Summarize the following the text."
+                                },
+                                {
+                                  "type": "text",
+                                  "text.$": "$.transcriptData.full_text"
+                                }
+                              ]
+                            }
+                          ]
                         }
-                      ]
+                      },
+                      "End": true
                     }
-                  ]
+                  }
+                },
+                {
+                  "StartAt": "DetectTopics",
+                  "States": {
+                    "DetectTopics": {
+                      "Type": "Task",
+                      "Resource": "arn:aws:states:::bedrock:invokeModel",
+                      "Parameters": {
+                        "ModelId": "anthropic.claude-instant-v1",
+                        "Body": {
+                          "anthropic_version": "bedrock-2023-05-31",
+                          "max_tokens": 256,
+                          "messages": [
+                            {
+                              "role": "user",
+                              "content": [
+                                {
+                                  "type": "text",
+                                  "text": "Your task is to extract the 3 to 5 main topics contained within the text provided by the user. Respond only once in the form of a brief markdown document. Do not lie or hallucinate."
+                                },
+                                {
+                                  "type": "text",
+                                  "text": "Extract the topics from the following the text."
+                                },
+                                {
+                                  "type": "text",
+                                  "text.$": "$.transcriptData.full_text"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      },
+                      "End": true
+                    }
+                  }
+                }
+              ],
+              "End": true,
+              "ResultPath": "$.bedrockResults"
+            }
+          }
+        },
+        {
+          "StartAt": "Process Chunks",
+          "States": {
+            "Process Chunks": {
+              "Type": "Map",
+              "ItemsPath": "$.transcriptData.chunks",
+              "Parameters": {
+                "chunk.$": "$$.Map.Item.Value"
+              },
+              "Iterator": {
+                "StartAt": "Analyze Chunk",
+                "States": {
+                  "Analyze Chunk": {
+                    "Type": "Parallel",
+                    "Branches": [
+                      {
+                        "StartAt": "DetectEntities",
+                        "States": {
+                          "DetectEntities": {
+                            "Type": "Task",
+                            "Parameters": {
+                              "Text.$": "$.chunk",
+                              "LanguageCode": "en"
+                            },
+                            "Resource": "arn:aws:states:::aws-sdk:comprehend:detectEntities",
+                            "End": true
+                          }
+                        }
+                      },
+                      {
+                        "StartAt": "DetectSentiment",
+                        "States": {
+                          "DetectSentiment": {
+                            "Type": "Task",
+                            "Parameters": {
+                              "Text.$": "$.chunk",
+                              "LanguageCode": "en"
+                            },
+                            "Resource": "arn:aws:states:::aws-sdk:comprehend:detectSentiment",
+                            "End": true
+                          }
+                        }
+                      }
+                    ],
+                    "End": true
+                  }
                 }
               },
-              "End": true
-            }
-          }
-        },
-        {
-          "StartAt": "DetectTopics",
-          "States": {
-            "DetectTopics": {
-              "Type": "Task",
-              "Resource": "arn:aws:states:::bedrock:invokeModel",
-              "Parameters": {
-                "ModelId": "anthropic.claude-instant-v1",
-                "Body": {
-                  "anthropic_version": "bedrock-2023-05-31",
-                  "max_tokens": 256,
-                  "messages": [
-                    {
-                      "role": "user",
-                      "content": [
-                        {
-                          "type": "text",
-                          "text": "Your task is to extract the 3 to 5 main topics contained within the text provided by the user. Respond only once in the form of a brief markdown document. Do not lie or hallucinate."
-                        },
-                        {
-                          "type": "text",
-                          "text": "Extract the topics from the following the text."
-                        },
-                        {
-                          "type": "text",
-                          "text.$": "$.readFileResult.text"
-                        }
-                      ]
-                    }
-                  ]
-                }
-              },
-              "End": true
-            }
-          }
-        },
-        {
-          "StartAt": "DetectEntities",
-          "States": {
-            "DetectEntities": {
-              "Type": "Task",
-              "Parameters": {
-                "Text.$": "$.readFileResult.text",
-                "LanguageCode": "en"
-              },
-              "Resource": "arn:aws:states:::aws-sdk:comprehend:detectEntities",
-              "End": true
-            }
-          }
-        },
-        {
-          "StartAt": "DetectSentiment",
-          "States": {
-            "DetectSentiment": {
-              "Type": "Task",
-              "Parameters": {
-                "Text.$": "$.readFileResult.text",
-                "LanguageCode": "en"
-              },
-              "Resource": "arn:aws:states:::aws-sdk:comprehend:detectSentiment",
-              "End": true
+              "End": true,
+              "ResultPath": "$.chunkResults"
             }
           }
         }
       ],
-      "Next": "Compile Analysis",
-      "ResultSelector": {
-        "summary.$": "$[0]",
-        "topics.$": "$[1]",
-        "entities.$": "$[2]",
-        "sentiment.$": "$[3]"
+      "Next": "Prepare Analysis Results",
+      "ResultPath": "$.parallelResults"
+    },
+    "Prepare Analysis Results": {
+      "Type": "Pass",
+      "Parameters": {
+        "summary": {
+          "Body.$": "$.parallelResults[0].bedrockResults[0].Body",
+          "ContentType": "application/json"
+        },
+        "topics": {
+          "Body.$": "$.parallelResults[0].bedrockResults[1].Body",
+          "ContentType": "application/json"
+        },
+        "entities.$": "States.Array($.parallelResults[1].chunkResults[*][0])",
+        "sentiment.$": "States.Array($.parallelResults[1].chunkResults[*][1])",
+        "key.$": "$.key"
       },
+      "Next": "Compile Analysis",
       "ResultPath": "$.analysisResult"
     },
     "Compile Analysis": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
       "Parameters": {
-        "Payload.$": "$",
-        "FunctionName": "arn:aws:lambda:us-east-1:816069165876:function:compile_text_analysis_rs:$LATEST"
+        "Payload.$": "$.analysisResult",
+        "FunctionName": "arn:aws:lambda:us-east-1:816069165876:function:compile_text_analysis_rs"
       },
       "Retry": [
         {
@@ -236,8 +293,7 @@
       "ResultSelector": {
         "report.$": "$.Payload.body"
       },
-      "ResultPath": "$.compilationResult",
-      "InputPath": "$.analysisResult"
+      "ResultPath": "$.compilationResult"
     },
     "Write Report": {
       "Type": "Task",
