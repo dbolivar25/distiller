@@ -3,6 +3,10 @@
 A serverless pipeline for processing and analyzing audio content using AWS
 services.
 
+## Quick Demo
+
+Watch the [demo video](https://asciinema.org/a/MAaa5ziNWtWzdQ0zdosTUNEHJ) to see the pipeline run on an excerpt from a recorded interview discussing biological technologies such as CRISPR.
+
 ## Architecture
 
 The solution uses multiple AWS services orchestrated by Step Functions:
