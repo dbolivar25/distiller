@@ -137,7 +137,7 @@
                                 },
                                 {
                                   "type": "text",
-                                  "text": "Summarize the following the text."
+                                  "text": "Summarize the following text.\n\n"
                                 },
                                 {
                                   "type": "text",
