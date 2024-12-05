@@ -7,11 +7,17 @@ use std::collections::HashMap;
 
 #[derive(Debug, Deserialize)]
 struct AnalysisResult {
-    summary: BedrockWrapper,
+    overview: BedrockWrapper,
+    main_topics: BedrockWrapper,
+    chunk_summaries: Vec<ChunkAnalysis>,
     sentiment: Vec<Vec<SentimentData>>,
     entities: Vec<Vec<EntityData>>,
-    topics: BedrockWrapper,
     key: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChunkAnalysis {
+    chunkAnalysis: Vec<BedrockWrapper>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -72,17 +78,6 @@ struct Response {
     statusCode: i32,
     body: String,
     headers: HashMap<String, String>,
-}
-
-fn extract_text(bedrock_response: &BedrockWrapper) -> String {
-    bedrock_response
-        .Body
-        .content
-        .iter()
-        .filter(|block| block.content_type == "text")
-        .map(|block| block.text.clone())
-        .collect::<Vec<String>>()
-        .join("\n")
 }
 
 fn format_sentiment_score(score: f64) -> String {
@@ -205,19 +200,40 @@ fn format_entities(entities_chunks: &[Vec<EntityData>]) -> String {
     sections.join("\n\n")
 }
 
+fn extract_text(bedrock_response: &BedrockWrapper) -> String {
+    bedrock_response
+        .Body
+        .content
+        .iter()
+        .filter(|block| block.content_type == "text")
+        .map(|block| block.text.clone())
+        .collect::<Vec<String>>()
+        .join("\n")
+}
+
+fn format_chunk_summaries(chunk_summaries: &[ChunkAnalysis]) -> String {
+    chunk_summaries
+        .iter()
+        .enumerate()
+        .map(|(i, chunk)| {
+            let summary = extract_text(&chunk.chunkAnalysis[0]);
+            let topics = extract_text(&chunk.chunkAnalysis[1]);
+            format!(
+                "### Chunk {} Summary\n{}\n\n#### Topics\n{}",
+                i + 1,
+                summary.trim(),
+                topics.trim()
+            )
+        })
+        .collect::<Vec<String>>()
+        .join("\n\n")
+}
+
 async fn function_handler(event: LambdaEvent<Value>) -> Result<Response, Error> {
-    tracing::info!(
-        "Input payload: {}",
-        serde_json::to_string_pretty(&event.payload)?
-    );
+    let analysis: AnalysisResult = serde_json::from_value(event.payload)?;
 
-    let analysis: AnalysisResult = serde_json::from_value(event.payload.clone())
-        .map_err(|e| Error::from(format!("Failed to parse Step Functions payload: {}", e)))?;
-
-    let summary = extract_text(&analysis.summary);
-    let topics = extract_text(&analysis.topics);
-
-    // Combine sentiment from all chunks
+    let overview = extract_text(&analysis.overview);
+    let main_topics = extract_text(&analysis.main_topics);
     let combined_sentiment = combine_sentiment_data(&analysis.sentiment);
     let sentiment_emoji = get_sentiment_emoji(&combined_sentiment.Sentiment);
 
@@ -225,8 +241,10 @@ async fn function_handler(event: LambdaEvent<Value>) -> Result<Response, Error> 
         r#"# Analysis Results for {}
 Generated on {} UTC
 
+## Overview
 {}
 
+## Main Topics
 {}
 
 ## Sentiment Analysis {}
@@ -240,11 +258,14 @@ Confidence Scores:
 
 ## Named Entities
 {}
+
+## Detailed Section Summaries
+{}
 "#,
         analysis.key,
         Utc::now().format("%Y-%m-%d %H:%M:%S"),
-        summary.replace("# ", "## "),
-        topics.replace("# ", "## "),
+        overview,
+        main_topics,
         sentiment_emoji,
         combined_sentiment.Sentiment.to_lowercase(),
         format_sentiment_score(
@@ -271,7 +292,8 @@ Confidence Scores:
                 .get("Mixed")
                 .unwrap_or(&0.0)
         ),
-        format_entities(&analysis.entities)
+        format_entities(&analysis.entities),
+        format_chunk_summaries(&analysis.chunk_summaries)
     );
 
     let mut headers = HashMap::new();
