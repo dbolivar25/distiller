@@ -111,15 +111,105 @@
       "Type": "Parallel",
       "Branches": [
         {
-          "StartAt": "Bedrock Analysis",
+          "StartAt": "Process Chunks for Bedrock",
           "States": {
-            "Bedrock Analysis": {
+            "Process Chunks for Bedrock": {
+              "Type": "Map",
+              "ItemsPath": "$.transcriptData.chunks",
+              "Parameters": {
+                "chunk.$": "$$.Map.Item.Value",
+                "index.$": "$$.Map.Item.Index"
+              },
+              "Iterator": {
+                "StartAt": "Analyze Single Chunk",
+                "States": {
+                  "Analyze Single Chunk": {
+                    "Type": "Parallel",
+                    "Branches": [
+                      {
+                        "StartAt": "Summarize Chunk",
+                        "States": {
+                          "Summarize Chunk": {
+                            "Type": "Task",
+                            "Resource": "arn:aws:states:::bedrock:invokeModel",
+                            "Parameters": {
+                              "ModelId": "anthropic.claude-instant-v1",
+                              "Body": {
+                                "anthropic_version": "bedrock-2023-05-31",
+                                "max_tokens": 256,
+                                "messages": [
+                                  {
+                                    "role": "user",
+                                    "content": [
+                                      {
+                                        "type": "text",
+                                        "text": "Your task is to summarize the text provided by the user. Be concise but preserve key details. Respond only once in the form of a brief markdown document."
+                                      },
+                                      {
+                                        "type": "text",
+                                        "text": "Summarize the following text:"
+                                      },
+                                      {
+                                        "type": "text",
+                                        "text.$": "$.chunk"
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            },
+                            "End": true
+                          }
+                        }
+                      },
+                      {
+                        "StartAt": "Extract Chunk Topics",
+                        "States": {
+                          "Extract Chunk Topics": {
+                            "Type": "Task",
+                            "Resource": "arn:aws:states:::bedrock:invokeModel",
+                            "Parameters": {
+                              "ModelId": "anthropic.claude-instant-v1",
+                              "Body": {
+                                "anthropic_version": "bedrock-2023-05-31",
+                                "max_tokens": 128,
+                                "messages": [
+                                  {
+                                    "role": "user",
+                                    "content": [
+                                      {
+                                        "type": "text",
+                                        "text": "Extract 2-3 main topics from this text. Respond in markdown bullet points. Be specific and concise."
+                                      },
+                                      {
+                                        "type": "text",
+                                        "text.$": "$.chunk"
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            },
+                            "End": true
+                          }
+                        }
+                      }
+                    ],
+                    "End": true,
+                    "ResultPath": "$.chunkAnalysis"
+                  }
+                }
+              },
+              "Next": "Create Overview",
+              "ResultPath": "$.chunkResults"
+            },
+            "Create Overview": {
               "Type": "Parallel",
               "Branches": [
                 {
-                  "StartAt": "Summarize",
+                  "StartAt": "Summarize All Chunks",
                   "States": {
-                    "Summarize": {
+                    "Summarize All Chunks": {
                       "Type": "Task",
                       "Resource": "arn:aws:states:::bedrock:invokeModel",
                       "Parameters": {
@@ -133,15 +223,11 @@
                               "content": [
                                 {
                                   "type": "text",
-                                  "text": "Your task is to summarize the text provided by the user. Respond only once in the form of a brief markdown document. Do not lie or hallucinate."
+                                  "text": "Below are summaries of different sections of a longer text. Create a cohesive overview summary that captures the key points. Write in markdown format."
                                 },
                                 {
                                   "type": "text",
-                                  "text": "Summarize the following the text."
-                                },
-                                {
-                                  "type": "text",
-                                  "text.$": "$.transcriptData.full_text"
+                                  "text.$": "States.Format('Chunk Summaries:\n\n{}', States.StringToJson(States.Array($.chunkResults[*].chunkAnalysis[0].Body.content[0].text)))"
                                 }
                               ]
                             }
@@ -153,9 +239,9 @@
                   }
                 },
                 {
-                  "StartAt": "DetectTopics",
+                  "StartAt": "Consolidate Topics",
                   "States": {
-                    "DetectTopics": {
+                    "Consolidate Topics": {
                       "Type": "Task",
                       "Resource": "arn:aws:states:::bedrock:invokeModel",
                       "Parameters": {
@@ -169,15 +255,11 @@
                               "content": [
                                 {
                                   "type": "text",
-                                  "text": "Your task is to extract the 3 to 5 main topics contained within the text provided by the user. Respond only once in the form of a brief markdown document. Do not lie or hallucinate."
+                                  "text": "Below are topics extracted from different sections of a longer text. Analyze these topics and provide 3-5 main overarching topics that best represent the entire content. Write in markdown bullet points."
                                 },
                                 {
                                   "type": "text",
-                                  "text": "Extract the topics from the following the text."
-                                },
-                                {
-                                  "type": "text",
-                                  "text.$": "$.transcriptData.full_text"
+                                  "text.$": "States.Format('Section Topics:\n\n{}', States.StringToJson(States.Array($.chunkResults[*].chunkAnalysis[1].Body.content[0].text)))"
                                 }
                               ]
                             }
@@ -190,14 +272,14 @@
                 }
               ],
               "End": true,
-              "ResultPath": "$.bedrockResults"
+              "ResultPath": "$.overviewResults"
             }
           }
         },
         {
-          "StartAt": "Process Chunks",
+          "StartAt": "Process Chunks for Comprehend",
           "States": {
-            "Process Chunks": {
+            "Process Chunks for Comprehend": {
               "Type": "Map",
               "ItemsPath": "$.transcriptData.chunks",
               "Parameters": {
@@ -243,7 +325,7 @@
                 }
               },
               "End": true,
-              "ResultPath": "$.chunkResults"
+              "ResultPath": "$.comprehendResults"
             }
           }
         }
@@ -254,16 +336,17 @@
     "Prepare Analysis Results": {
       "Type": "Pass",
       "Parameters": {
-        "summary": {
-          "Body.$": "$.parallelResults[0].bedrockResults[0].Body",
+        "overview": {
+          "Body.$": "$.parallelResults[0].overviewResults[0].Body",
           "ContentType": "application/json"
         },
-        "topics": {
-          "Body.$": "$.parallelResults[0].bedrockResults[1].Body",
+        "main_topics": {
+          "Body.$": "$.parallelResults[0].overviewResults[1].Body",
           "ContentType": "application/json"
         },
-        "entities.$": "States.Array($.parallelResults[1].chunkResults[*][0])",
-        "sentiment.$": "States.Array($.parallelResults[1].chunkResults[*][1])",
+        "chunk_summaries.$": "$.parallelResults[0].chunkResults",
+        "entities.$": "States.Array($.parallelResults[1].comprehendResults[*][0])",
+        "sentiment.$": "States.Array($.parallelResults[1].comprehendResults[*][1])",
         "key.$": "$.key"
       },
       "Next": "Compile Analysis",
