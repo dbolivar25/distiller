@@ -4,7 +4,7 @@ Generated on 2024-12-06 01:32:24 UTC
 
 ## Overview
 
-# Overview of Discussions on CRISPR and Genetic Technologies
+### Overview of Discussions on CRISPR and Genetic Technologies
 
 The interviews discuss the development and applications of CRISPR as well as the
 ethical issues surrounding new genetic technologies.
@@ -141,7 +141,7 @@ Confidence Scores:
 
 ### Chunk 1 Summary
 
-# Summary of CRISPR Initial Reactions
+#### Summary of CRISPR Initial Reactions
 
 The interviewee first heard about CRISPR from a lab mate while in graduate
 school. The lab mate was excited about its potential and was one of the first to
@@ -174,7 +174,7 @@ The main topics are:
 
 ### Chunk 2 Summary
 
-# CRISPR Summary
+#### CRISPR Summary
 
 The speaker discusses CRISPR, its current applications, limitations, and future
 potential. Some key points:
@@ -217,7 +217,7 @@ Here are the main topics in bullet points:
 
 ### Chunk 3 Summary
 
-# Summary of Discussion on CRISPR Ethics
+#### Summary of Discussion on CRISPR Ethics
 
 The speaker discusses ethical issues surrounding the use of CRISPR technology.
 They agree with the general consensus that somatic cell editing for treatment
@@ -261,7 +261,7 @@ Here are the main topics in bullet points:
 
 ### Chunk 4 Summary
 
-# Summary of Discussion on Mitochondrial Replacement Therapy and Genetic Selection
+#### Summary of Discussion on Mitochondrial Replacement Therapy and Genetic Selection
 
 The discussion centers around the ethics of mitochondrial replacement therapy
 and genetic selection of embryos. Key points discussed:
@@ -308,7 +308,7 @@ Here are the main topics in bullet points:
 
 ### Chunk 5 Summary
 
-# Summary of discussion on ethics of genetic selection technologies
+#### Summary of discussion on ethics of genetic selection technologies
 
 The speakers discuss several complex issues surrounding new genetic technologies
 like IVF, PGS, and CRISPR. Some key points:
