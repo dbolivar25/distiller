@@ -200,8 +200,24 @@
                   }
                 }
               },
-              "Next": "Create Overview",
+              "Next": "Combine Summaries",
               "ResultPath": "$.chunkResults"
+            },
+            "Combine Summaries": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Parameters": {
+                "FunctionName": "arn:aws:lambda:us-east-1:816069165876:function:reduce_summary_chunks_rs",
+                "Payload": {
+                  "chunkResults.$": "$.chunkResults"
+                }
+              },
+              "Next": "Create Overview",
+              "ResultPath": "$.combinedSummaries",
+              "ResultSelector": {
+                "summaries.$": "$.Payload.body.summaries",
+                "topics.$": "$.Payload.body.topics"
+              }
             },
             "Create Overview": {
               "Type": "Parallel",
@@ -227,7 +243,11 @@
                                 },
                                 {
                                   "type": "text",
-                                  "text.$": "States.Format('Chunk Summaries:\n\n{}', States.StringToJson(States.Array($.chunkResults[*].chunkAnalysis[0].Body.content[0].text)))"
+                                  "text": "Chunk Summaries:"
+                                },
+                                {
+                                  "type": "text",
+                                  "text.$": "$.combinedSummaries.summaries"
                                 }
                               ]
                             }
@@ -259,7 +279,11 @@
                                 },
                                 {
                                   "type": "text",
-                                  "text.$": "States.Format('Section Topics:\n\n{}', States.StringToJson(States.Array($.chunkResults[*].chunkAnalysis[1].Body.content[0].text)))"
+                                  "text": "Section Topics:"
+                                },
+                                {
+                                  "type": "text",
+                                  "text.$": "$.combinedSummaries.topics"
                                 }
                               ]
                             }
