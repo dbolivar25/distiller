@@ -23,10 +23,11 @@ AI-powered summarization.
 
 ## Quick Demo
 
-Watch this [demo video](https://asciinema.org/a/MAaa5ziNWtWzdQ0zdosTUNEHJ) to
-see the pipeline run on an excerpt from a recorded interview discussing
-biological technologies such as CRISPR. Skip to near the end as that is where
-the transcript and report are displayed.
+Watch this [demo video](https://asciinema.org/a/rCFSSM0G7b0ep52JwXZXImaln) to
+see the cli trigger the pipeline and await on the results for an excerpt from a
+recorded interview discussing biological technologies such as CRISPR.
+
+Watch this [demo video](https://asciinema.org/a/tnb4yeQrzDaRMfwIAy1fm507s) to see the results of the above execution.
 
 ## Architecture
 
