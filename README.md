@@ -164,7 +164,7 @@ distiller get transcript <bucket> <key> --output transcript.txt
 
 ### CLI Options
 
-```bash
+```
 USAGE:
     distiller [OPTIONS] <COMMAND>
 
