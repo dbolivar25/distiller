@@ -182,7 +182,7 @@ OPTIONS:
 
 ### Processing Options
 
-```bash
+```
 distiller process [OPTIONS] <BUCKET> <FILE>
 
 OPTIONS:
