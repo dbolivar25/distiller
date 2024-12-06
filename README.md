@@ -1,10 +1,14 @@
 # Distiller
 
-A serverless solution for processing, transcribing, and analyzing audio content using AWS services. Distiller extracts meaningful insights from audio files through transcription, sentiment analysis, named entity recognition, and AI-powered summarization.
+A serverless solution for processing, transcribing, and analyzing audio content
+using AWS services. Distiller extracts meaningful insights from audio files
+through transcription, sentiment analysis, named entity recognition, and
+AI-powered summarization.
 
 ## Features
 
-- 🎙️ **Audio Transcription**: High-quality transcription with speaker diarization using AWS Transcribe
+- 🎙️ **Audio Transcription**: High-quality transcription with speaker
+  diarization using AWS Transcribe
 - 🤖 **AI-Powered Analysis**:
   - Content summarization using AWS Bedrock (Claude)
   - Topic extraction and categorization
@@ -13,12 +17,16 @@ A serverless solution for processing, transcribing, and analyzing audio content 
   - Sentiment analysis across transcript segments
   - Named entity recognition
   - Key topic identification
-- 📝 **Report Generation**: Comprehensive Markdown reports containing analysis results
+- 📝 **Report Generation**: Comprehensive Markdown reports containing analysis
+  results
 - 🛠️ **CLI Tool**: Rust-based command line interface for easy interaction
 
 ## Quick Demo
 
-Watch this [demo video](https://asciinema.org/a/MAaa5ziNWtWzdQ0zdosTUNEHJ) to see the pipeline run on an excerpt from a recorded interview discussing biological technologies such as CRISPR. Skip to near the end as that is where the transcript and report are displayed.
+Watch this [demo video](https://asciinema.org/a/MAaa5ziNWtWzdQ0zdosTUNEHJ) to
+see the pipeline run on an excerpt from a recorded interview discussing
+biological technologies such as CRISPR. Skip to near the end as that is where
+the transcript and report are displayed.
 
 ## Architecture
 
@@ -26,7 +34,9 @@ Watch this [demo video](https://asciinema.org/a/MAaa5ziNWtWzdQ0zdosTUNEHJ) to se
 
 #### 1. Semantic Double-Pass Chunking
 
-Distiller employs an advanced semantic chunking strategy that preserves context and meaning across segment boundaries - a critical challenge in processing long-form content. Our double-pass approach:
+Distiller employs an advanced semantic chunking strategy that preserves context
+and meaning across segment boundaries - a critical challenge in processing
+long-form content. Our double-pass approach:
 
 First Pass:
 
@@ -50,7 +60,11 @@ Benefits:
 
 #### 2. Recursive Analysis Architecture
 
-At the heart of Distiller is a unique recursive analysis approach that solves a critical challenge in processing long-form audio content: LLM bias towards recently processed content. Traditional approaches often result in summaries and topic lists that overemphasize the latter portions of transcripts, leading to incomplete or skewed analysis.
+At the heart of Distiller is a unique recursive analysis approach that solves a
+critical challenge in processing long-form audio content: LLM bias towards
+recently processed content. Traditional approaches often result in summaries and
+topic lists that overemphasize the latter portions of transcripts, leading to
+incomplete or skewed analysis.
 
 Our solution implements a two-phase recursive analysis:
 
@@ -58,12 +72,14 @@ Our solution implements a two-phase recursive analysis:
 
    - Processed semantic chunks receive independent analysis
    - Each chunk gets summarization and topic extraction
-   - This preserves important details that might be lost in a single-pass analysis
+   - This preserves important details that might be lost in a single-pass
+     analysis
 
 2. **Top-down Synthesis Phase**
    - Individual chunk summaries are recursively combined
    - Topics are aggregated and re-analyzed for holistic understanding
-   - Final pass creates cohesive overview that maintains balance across the entire content
+   - Final pass creates cohesive overview that maintains balance across the
+     entire content
 
 This approach ensures:
 
@@ -81,7 +97,8 @@ This approach ensures:
    - Progress tracking and result retrieval
    - Configurable AWS credentials and regions
 
-2. **Step Functions Workflow** (`step_functions/AudioProcessingPipeline.asl.json`)
+2. **Step Functions Workflow**
+   (`step_functions/AudioProcessingPipeline.asl.json`)
 
    - Orchestrates the recursive analysis pipeline
    - Manages parallel processing and error handling
@@ -89,8 +106,10 @@ This approach ensures:
    - Coordinates the bottom-up and top-down analysis phases
 
 3. **Lambda Functions** (`lambdas/`)
-   - `extract-transcript`: Implements double-pass semantic chunking with boundary refinement
-   - `reduce_chunk_summaries`: Performs recursive summary combination and topic synthesis
+   - `extract-transcript`: Implements double-pass semantic chunking with
+     boundary refinement
+   - `reduce_chunk_summaries`: Performs recursive summary combination and topic
+     synthesis
    - `compile_text_analysis`: Generates balanced, comprehensive reports
 
 ### AWS Services Used
