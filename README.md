@@ -164,7 +164,7 @@ distiller get transcript <bucket> <key> --output transcript.txt
 
 ### CLI Options
 
-```
+```bash
 USAGE:
     distiller [OPTIONS] <COMMAND>
 
@@ -269,7 +269,7 @@ OPTIONS:
 
 ## Project Structure
 
-```
+```bash
 .
 ├── assets/                 # Project assets
 ├── interfaces/
@@ -280,15 +280,3 @@ OPTIONS:
 │   └── compile_text_analysis/
 └── step_functions/        # Step Functions workflow definition
 ```
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to your branch
-5. Create a Pull Request
-
-## License
-
-[Insert License Information]
