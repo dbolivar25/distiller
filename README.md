@@ -32,11 +32,11 @@ the transcript and report are displayed.
 
 ### Key Innovations
 
-#### 1. Semantic Double-Pass Chunking
+#### 1. Semantic Double-Pass Merging
 
 Distiller employs an advanced semantic chunking strategy that preserves context
 and meaning across segment boundaries - a critical challenge in processing
-long-form content. Our double-pass approach:
+long-form content. The double-pass approach:
 
 First Pass:
 
