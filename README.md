@@ -32,7 +32,11 @@ see the results of the above execution.
 
 ## Architecture
 
-### Key Innovations
+### Diagram
+
+![State Machine Diagram](./assets/stepfunctions_graph.svg)
+
+### Key Optimizations
 
 #### 1. Semantic Double-Pass Merging
 
