@@ -48,11 +48,9 @@ First Pass:
 
 - Initial segmentation based on semantic boundaries
 - Respect for natural language boundaries (sentences, paragraphs)
-- Conservative break point selection to maintain context
 
 Second Pass:
 
-- Analysis of chunk boundaries for semantic coherence
 - Smart merging of segments that share strong contextual relationships up to the
   optimal token length for a chunk
 - Optimization for LLM context windows while maintaining semantic integrity
