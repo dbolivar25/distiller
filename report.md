@@ -6,6 +6,34 @@ geometry: margin=1in
 
 ## Authors: Daniel Bolivar, Clint Lang, Will Owens
 
+## Abstract
+
+Distiller is a serverless framework for automated analysis of long-form audio
+content that addresses key challenges in maintaining semantic coherence and
+balanced representation across extended technical discussions. The system
+employs two key techniques: semantic double-pass merging for context-preserving
+text segmentation, and a recursive analysis architecture that ensures balanced
+content representation across varying document lengths.
+
+Built on AWS serverless technologies, Distiller implements a multi-stage
+pipeline that combines audio transcription, natural language processing, and
+AI-powered analysis through parallel processing streams. The framework's modular
+architecture enables scalable processing while maintaining semantic
+relationships across content boundaries.
+
+Evaluation through complex technical discussions, particularly in genetic
+engineering, demonstrates the system's effectiveness in preserving specialized
+terminology, maintaining contextual relationships, and producing balanced
+analyses of extended content. The framework achieves this while operating within
+practical resource constraints through careful optimization of chunk sizes and
+processing strategies.
+
+Our implementation shows that combining semantic chunking with recursive
+analysis enables more comprehensive and balanced content processing than
+traditional approaches. The system's success in handling complex technical
+discussions while maintaining both accuracy and efficiency demonstrates the
+viability of automated analysis for sophisticated audio content.
+
 ## 1. Introduction
 
 ### 1.1 Background and Motivation
@@ -346,6 +374,17 @@ fundamental challenges in processing long-form audio content: maintaining
 context and meaning across segment boundaries while optimizing for downstream
 processing requirements.
 
+As illustrated in Figure 1, the system employs a sophisticated two-pass approach
+to text segmentation. In the first pass, the system detects semantic boundaries
+and creates initial chunks while respecting natural language structures like
+sentences and paragraphs. This chunking process, shown in the middle section of
+Figure 1, ensures that related concepts remain together. The second pass,
+demonstrated in the lower section of Figure 1, involves intelligent merging of
+related chunks while maintaining strict size constraints (typically 4,500 to
+4,900 characters).
+
+![Semantic Double-Pass Merging Process.](./assets/semantic_double_pass_merging.svg)
+
 The system employs a sophisticated two-pass approach to text segmentation. In
 the first pass, the system performs initial segmentation based on semantic
 boundaries, ensuring that natural language structures like sentences and
@@ -369,6 +408,15 @@ processing long-form audio content: maintaining balanced representation across
 the entire transcript while preserving important details. This is particularly
 important for longer content where traditional single-pass approaches often show
 bias toward either the beginning or end of the content.
+
+As shown in Figure 2, the analysis process begins with multiple input chunks
+that undergo progressive summarization. The first level summaries, depicted in
+the middle section of Figure 2, combine related content while maintaining key
+information. These intermediate summaries are then further synthesized into a
+top-level summary that captures the essential points from all input chunks,
+ensuring balanced representation of the original content.
+
+![Recursive Summarization Process.](./assets/recursive_summarization.svg)
 
 The bottom-up analysis phase begins with parallel processing of individual
 chunks. Each chunk undergoes multiple types of analysis:
