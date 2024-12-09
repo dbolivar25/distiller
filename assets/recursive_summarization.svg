@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">
+    <!-- Background -->
+    <rect width="800" height="500" fill="#ffffff"/>
+
+    <!-- Original Chunks -->
+    <text x="50" y="30" fill="#1e40af" font-weight="bold" font-size="14">Input Chunks</text>
+
+    <!-- Chunk 1 -->
+    <rect x="50" y="50" width="330" height="70" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+    <text x="60" y="70" fill="#1e40af" font-family="monospace" font-size="12">
+        <tspan x="60" dy="0">CRISPR technology enables precise DNA</tspan>
+        <tspan x="60" dy="20">editing using guide RNA to target</tspan>
+        <tspan x="60" dy="20">specific genetic sequences.</tspan>
+    </text>
+
+    <!-- Chunk 2 -->
+    <rect x="400" y="50" width="350" height="70" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+    <text x="410" y="70" fill="#1e40af" font-family="monospace" font-size="12">
+        <tspan x="410" dy="0">This breakthrough has revolutionized</tspan>
+        <tspan x="410" dy="20">genetic research with applications</tspan>
+        <tspan x="410" dy="20">in medicine and biotechnology.</tspan>
+    </text>
+
+    <!-- Chunk 3 -->
+    <rect x="50" y="130" width="330" height="70" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+    <text x="60" y="150" fill="#1e40af" font-family="monospace" font-size="12">
+        <tspan x="60" dy="0">Ethical debates focus on germline</tspan>
+        <tspan x="60" dy="20">editing, which affects future</tspan>
+        <tspan x="60" dy="20">generations permanently.</tspan>
+    </text>
+
+    <!-- Chunk 4 -->
+    <rect x="400" y="130" width="350" height="70" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+    <text x="410" y="150" fill="#1e40af" font-family="monospace" font-size="12">
+        <tspan x="410" dy="0">Scientists advocate for careful</tspan>
+        <tspan x="410" dy="20">regulation while acknowledging</tspan>
+        <tspan x="410" dy="20">therapeutic potential.</tspan>
+    </text>
+
+    <!-- First Level Summaries -->
+    <text x="50" y="230" fill="#5b21b6" font-weight="bold" font-size="14">First Level Summary</text>
+
+    <!-- Summary 1 -->
+    <rect x="50" y="250" width="330" height="70" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+    <text x="60" y="270" fill="#5b21b6" font-family="monospace" font-size="12">
+        <tspan x="60" dy="0">CRISPR enables precise genetic</tspan>
+        <tspan x="60" dy="20">modification with revolutionary</tspan>
+        <tspan x="60" dy="20">impact in research and medicine</tspan>
+    </text>
+
+    <!-- Summary 2 -->
+    <rect x="400" y="250" width="350" height="70" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+    <text x="410" y="270" fill="#5b21b6" font-family="monospace" font-size="12">
+        <tspan x="410" dy="0">Ethical considerations and regulation</tspan>
+        <tspan x="410" dy="20">focus on germline editing impacts</tspan>
+        <tspan x="410" dy="20">and therapeutic applications</tspan>
+    </text>
+
+    <!-- Final Summary -->
+    <text x="50" y="350" fill="#065f46" font-weight="bold" font-size="14">Top Level Summary</text>
+
+    <rect x="50" y="370" width="700" height="110" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+    <text x="60" y="390" fill="#065f46" font-family="monospace" font-size="12">
+        <tspan x="60" dy="0">CRISPR technology represents a breakthrough in genetic engineering, enabling</tspan>
+        <tspan x="60" dy="20">precise DNA modifications with significant applications in medicine and research.</tspan>
+        <tspan x="60" dy="20">While the technology shows remarkable potential for therapeutic applications,</tspan>
+        <tspan x="60" dy="20">careful regulation is advocated, particularly for germline editing affecting</tspan>
+        <tspan x="60" dy="20">future generations.</tspan>
+    </text>
+
+    <!-- Arrows -->
+    <!-- <path d="M 225,110 L 225,240" fill="none" stroke="#6b7280" stroke-width="2" marker-end="url(#arrowhead)"/> -->
+    <!-- <path d="M 575,110 L 575,240" fill="none" stroke="#6b7280" stroke-width="2" marker-end="url(#arrowhead)"/> -->
+    <!---->
+    <!-- <path d="M 225,310 L 400,360" fill="none" stroke="#6b7280" stroke-width="2" marker-end="url(#arrowhead)"/> -->
+    <!-- <path d="M 575,310 L 400,360" fill="none" stroke="#6b7280" stroke-width="2" marker-end="url(#arrowhead)"/> -->
+
+    <!-- Arrow Marker -->
+    <!-- <defs> -->
+    <!--     <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"> -->
+    <!--         <polygon points="0 0, 10 3.5, 0 7" fill="#6b7280"/> -->
+    <!--     </marker> -->
+    <!-- </defs> -->
+</svg>
