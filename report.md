@@ -48,10 +48,10 @@ understanding across long-form audio materials.
 
 Processing extended audio content involves multiple complex tasks: accurate
 transcription with speaker attribution, maintenance of semantic relationships
-across content segments, and extraction of key insights while preserving
-context. Traditional approaches often struggle with maintaining consistent
-analysis quality across longer content, particularly when handling technical
-discussions that require preservation of specialized terminology and concepts.
+across segments, and extraction of key insights while preserving context.
+Traditional approaches often struggle with maintaining consistent analysis
+quality across technical discussions that require preservation of specialized
+terminology and concepts.
 
 #### Need for Scalable Processing Solutions
 
@@ -250,19 +250,17 @@ content.
 
 ### 3.1 Overview
 
-At its core, Distiller represents a modern approach to audio content analysis
-through a sophisticated serverless architecture. Rather than relying on
-monolithic processing, the system breaks down complex audio analysis into a
-series of discrete, manageable operations. This decomposition is orchestrated
-through AWS Step Functions, enabling both parallel processing capabilities and
-fine-grained control over system resources and error handling.
+Distiller represents a modern approach to audio content analysis through a
+sophisticated serverless architecture. Rather than relying on monolithic
+processing, the system breaks down complex audio analysis into discrete,
+manageable operations orchestrated through AWS Step Functions. This enables
+parallel processing capabilities and fine-grained control over system resources
+and error handling.
 
-The architecture follows a carefully designed multi-stage pipeline pattern. Each
-stage operates as an independent, scalable component, allowing for isolated
-maintenance and optimization. The pipeline progresses through several key
-stages: initial input validation and preprocessing, audio transcription,
-semantic text chunking, parallel analysis processing, and finally, result
-synthesis and compilation.
+Each pipeline stage operates as an independent, scalable component, progressing
+through input validation, audio transcription, semantic text chunking, parallel
+analysis processing, and result synthesis. This design allows for isolated
+maintenance and optimization of each component.
 
 What sets Distiller apart is its data flow architecture. The system combines
 direct service integrations with intermediate storage in S3, creating an
@@ -365,23 +363,18 @@ handling. This design enables independent scaling and maintenance while ensuring
 reliable end-to-end processing. The result is a system that can handle varying
 workloads while maintaining processing accuracy and efficiency.
 
-## 4. Technical Implementation
+## 4. Technical Details
 
 ### 4.1 Semantic Double-Pass Merging
 
-The semantic chunking system implemented in Distiller addresses one of the
-fundamental challenges in processing long-form audio content: maintaining
-context and meaning across segment boundaries while optimizing for downstream
-processing requirements.
+The semantic chunking system addresses one of the fundamental challenges in
+processing long-form audio content: maintaining context across segment
+boundaries while optimizing for downstream processing requirements.
 
-As illustrated in Figure 1, the system employs a sophisticated two-pass approach
-to text segmentation. In the first pass, the system detects semantic boundaries
-and creates initial chunks while respecting natural language structures like
-sentences and paragraphs. This chunking process, shown in the middle section of
-Figure 1, ensures that related concepts remain together. The second pass,
-demonstrated in the lower section of Figure 1, involves intelligent merging of
-related chunks while maintaining strict size constraints (typically 4,500 to
-4,900 characters).
+As illustrated in Figure 1, the system employs a two-pass approach to text
+segmentation. The first pass detects semantic boundaries and creates initial
+chunks while respecting natural language structures, ensuring related concepts
+remain together.
 
 ![Semantic Double-Pass Merging Process.](./assets/semantic_double_pass_merging.svg)
 
@@ -443,10 +436,10 @@ analysis.
 
 The error handling system operates at multiple levels throughout the pipeline.
 At the workflow level, the Step Functions state machine implements comprehensive
-error checking and recovery mechanisms. Each Lambda function includes its own
-error handling with configurable retry policies for different types of failures.
-This multi-layered approach ensures robust operation even when dealing with
-transient service issues or resource constraints.
+error checking and recovery mechanisms, while each Lambda function includes
+configurable retry policies for different types of failures. This multi-layered
+approach ensures robust operation even when dealing with transient service
+issues or resource constraints.
 
 Resource management is carefully optimized throughout the system. The Lambda
 functions are implemented in Rust, chosen for its memory safety and performance
@@ -545,7 +538,7 @@ while recognizing emotional elements in ethical considerations.
 
 ### 5.3 Technical Performance Characteristics
 
-The implementation demonstrates several key operational characteristics:
+The implementation demonstrates these key operational characteristics:
 
 #### Content Processing
 
@@ -561,9 +554,8 @@ The implementation demonstrates several key operational characteristics:
 - Produces structured, hierarchical output
 - Preserves technical precision while enabling high-level analysis
 
-These characteristics are evidenced in the system's ability to process complex
-technical discussions while producing coherent, structured analysis outputs that
-maintain both technical accuracy and semantic relationships.
+These capabilities enable the system to process complex technical discussions
+while maintaining both accuracy and semantic relationships.
 
 The evaluation demonstrates Distiller's capability to handle sophisticated
 technical content while maintaining analytical precision and contextual
